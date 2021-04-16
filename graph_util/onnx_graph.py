@@ -167,7 +167,7 @@ class ONNXGraph:
                             'parents':[],
                             'children':[],
                             'output_shape':[-1] + input_shape}
-                        self.annette_graph.add_layer(input_name, layers[input_name])
+                        self.annette_graph.add_layer(input_name, layers[input_name],True)
 
                         annette_inputs.append(layers[input_name])
 
@@ -359,7 +359,7 @@ class ONNXGraph:
                 'pads': pad,
                 'kernel_shape': kernel_shape,
                 'output_shape': out_shape}
-            self.annette_graph.add_layer(node_name, layers[node_name])
+            self.annette_graph.add_layer(node_name, layers[node_name],True)
             
             #using functional model
             #input 0: Tensor("input_1:0", shape=(None, 3, 0, 0), dtype=float32)
@@ -402,7 +402,7 @@ class ONNXGraph:
                 'input_shape': layers[input_name]['output_shape'],
                 'perm': params['perm'],
                 'output_shape': out_shape}
-            self.annette_graph.add_layer(node_name, layers[node_name])
+            self.annette_graph.add_layer(node_name, layers[node_name],True)
 
         return
 
@@ -432,7 +432,7 @@ class ONNXGraph:
             'input_shape': layers[input_name]['output_shape'],
             'output_shape': layers[input_name]['output_shape']
             }
-        self.annette_graph.add_layer(node_name, layers[node_name])
+        self.annette_graph.add_layer(node_name, layers[node_name],True)
 
         return
 
@@ -503,7 +503,7 @@ class ONNXGraph:
             'pooling_type': pooling_type
             }
 
-        self.annette_graph.add_layer(node_name, layers[node_name])
+        self.annette_graph.add_layer(node_name, layers[node_name],True)
 
         return
 
@@ -543,7 +543,7 @@ class ONNXGraph:
             'input_shape': layers[input_name]['output_shape'],
             'output_shape': layers[input_name]['output_shape']
             }
-        self.annette_graph.add_layer(node_name, layers[node_name])
+        self.annette_graph.add_layer(node_name, layers[node_name],True)
 
         return
 
@@ -621,7 +621,7 @@ class ONNXGraph:
             'input_shape': [layers[input_name]['output_shape'][0], input_channels],
             'output_shape': [layers[input_name]['output_shape'][0], output_channels]
             }
-        self.annette_graph.add_layer(node_name, layers[node_name])
+        self.annette_graph.add_layer(node_name, layers[node_name],True)
 
         return
 
@@ -663,7 +663,7 @@ class ONNXGraph:
             'input_shape': layers[input_name]['output_shape'],
             'output_shape': output_shape,
             }
-        self.annette_graph.add_layer(node_name, layers[node_name])
+        self.annette_graph.add_layer(node_name, layers[node_name],True)
 
         return
 
@@ -703,7 +703,7 @@ class ONNXGraph:
             'input_shape': layers[input_name]['output_shape'],
             'output_shape': [len(layers[input_name]['output_shape'])]
             }
-        self.annette_graph.add_layer(node_name, layers[node_name])
+        self.annette_graph.add_layer(node_name, layers[node_name],True)
 
         return
 
@@ -743,7 +743,7 @@ class ONNXGraph:
             'input_shape': layers[input_name]['output_shape'],
             'output_shape': [len(layers[input_name]['output_shape'])]
             }
-        self.annette_graph.add_layer(node_name, layers[node_name])
+        self.annette_graph.add_layer(node_name, layers[node_name],True)
 
         return
 
