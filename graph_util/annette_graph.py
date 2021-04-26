@@ -9,6 +9,8 @@ import json
 import logging
 import numpy as np
 import sys
+from copy import copy, deepcopy
+from functools import reduce
 
 __author__ = "Matthias Wess"
 __copyright__ = "Christian Doppler Laboratory for Embedded Machine Learning"
@@ -232,7 +234,7 @@ class AnnetteGraph():
         else:
             logging.warning("Layer %s does not exists" % name)
             return False
-
+    
     def _get_topological_sort(self):
         """Resort Graph
 
@@ -257,6 +259,119 @@ class AnnetteGraph():
             idx += 1
         logging.debug(self.topological_sort)
         return self.topological_sort
+
+    def compute_dims(self):
+        #loop through layers
+        print(self.model_spec)
+        for l_name in self._get_topological_sort():
+            logging.debug("current layer")
+            l_attr = self.model_spec['layers'][l_name]
+            logging.debug(l_name)
+            logging.debug(l_attr)
+
+            l_type = l_attr['type'] 
+            #check if input layer
+            if l_name not in self.model_spec['input_layers']: 
+
+                #Compute Output Size
+                if hasattr(self, "compute_dims_" + l_type):
+                    func = getattr(self, "compute_dims_" + l_type)
+                else:
+                    func = getattr(self, "compute_dims_base")
+                self.model_spec['layers'][l_name] = func(l_name)
+
+            logging.debug("changed attributes to:")
+            logging.debug(l_name)
+            logging.debug(l_attr)
+
+    def compute_dims_Concat(self, l_name):
+        p_name = self.model_spec['layers'][l_name]['parents']
+        l_attr = self.model_spec['layers'][l_name]
+        l_type = l_attr['type'] 
+        #get input from parents
+        if 'axis' in l_attr:
+            tmp_sum = 0
+            l_attr['input_shape'] = [0]*len(p_name)
+            for n, p_tmp in enumerate(p_name):
+                p_attr = self.model_spec['layers'][p_tmp]
+                tmp_sum = tmp_sum + p_attr['output_shape'][l_attr['axis']]
+                l_attr['input_shape'][n] = copy(p_attr['output_shape'])
+                l_attr['output_shape'] = copy(p_attr['output_shape'])
+            l_attr['output_shape'][l_attr['axis']] = tmp_sum
+            logging.debug(tmp_sum)
+        else:
+            raise RuntimeError 
+            
+        logging.debug(l_attr)
+        return deepcopy(l_attr)
+
+    def compute_dims_Flatten(self, l_name):
+        p_name = self.model_spec['layers'][l_name]['parents']
+        l_attr = self.model_spec['layers'][l_name]
+        l_type = l_attr['type'] 
+
+        p_attr = self.model_spec['layers'][p_name[0]]
+        l_attr['input_shape'] = p_attr['output_shape']
+        size = reduce(lambda x, y: x*y, p_attr['output_shape'][1:])
+        l_attr['output_shape'] = [l_attr['input_shape'][0], size]
+            
+        logging.debug(l_attr)
+        return deepcopy(l_attr)
+
+    def compute_dims_MatMul(self, l_name):
+        l_attr = self.model_spec['layers'][l_name]
+        l_type = l_attr['type'] 
+        p_name = self.model_spec['layers'][l_name]['parents']
+        #get input from parents
+        if len(p_name) == 1:
+            p_attr = self.model_spec['layers'][p_name[0]]
+            l_attr['input_shape'] = p_attr['output_shape']
+        else:
+            raise NotImplementedError
+
+        l_attr['output_shape'][0] = l_attr['input_shape'][0]
+        logging.debug(l_attr)
+        return deepcopy(l_attr)
+
+    def compute_dims_Conv(self, l_name):
+        l_attr = self.model_spec['layers'][l_name]
+        l_type = l_attr['type'] 
+        p_name = self.model_spec['layers'][l_name]['parents']
+        #get input from parents
+        if len(p_name) == 1:
+            p_attr = self.model_spec['layers'][p_name[0]]
+            l_attr['input_shape'] = p_attr['output_shape']
+        else:
+            raise NotImplementedError
+        if 'strides' in l_attr:
+            l_attr['output_shape'] = [int(x/y) for x, y in zip(l_attr['input_shape'], l_attr['strides'])]
+        else:
+            l_attr['output_shape'] = l_attr['input_shape']
+        l_attr['output_shape'][-1] = l_attr['kernel_shape'][-1]
+        logging.debug(l_attr)
+        return deepcopy(l_attr)
+
+    def compute_dims_base(self, l_name):
+        l_attr = self.model_spec['layers'][l_name]
+        l_type = l_attr['type'] 
+        p_name = self.model_spec['layers'][l_name]['parents']
+        #get input from parents
+        if len(p_name) == 1:
+            p_attr = self.model_spec['layers'][p_name[0]]
+            l_attr['input_shape'] = p_attr['output_shape']
+        elif len(p_name) > 1:
+            if l_type in ['Add']:
+                p_attr = self.model_spec['layers'][p_name[0]]
+                l_attr['input_shape'] = p_attr['output_shape']
+            else:
+                raise NotImplementedError
+        if 'strides' in l_attr:
+            l_attr['output_shape'] = [int(x/y) for x, y in zip(l_attr['input_shape'], l_attr['strides'])]
+        else:
+            l_attr['output_shape'] = l_attr['input_shape']
+        logging.debug(l_attr)
+        return deepcopy(l_attr)
+
 
     def _check_left_parents(self, in_node_name, node):
         count = 0

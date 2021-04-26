@@ -144,7 +144,7 @@ class MMGraph:
             layer_dict['children'] = current_node.out_edges
 
             attributes = ['output_shape', 'input_shape', 'kernel_shape',
-                          'strides', 'pads', 'pooling_type', 'global_pooling', 'dilations']
+                          'strides', 'pads', 'pooling_type', 'global_pooling', 'dilations','axis']
 
             for attr in attributes:
                 tmp = current_node.get_attr(attr)
