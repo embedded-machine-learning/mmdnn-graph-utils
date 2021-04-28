@@ -16,25 +16,26 @@ Generally the Annette Format is derived from the MMDNN IR format in terms of att
 
 ### Network header:
 
-{
-    "name" : *network_name*,
-    "layers" : {
-        "layer_0" : {
-            "type" : "Conv",
-            "parents" : [],
-            "children" : ["layer_1"],
-            ...Layer Attributes...
+    {
+        "name" : *network_name*,
+        "layers" : {
+            "layer_0" : {
+                "type" : "Conv",
+                "parents" : [],
+                "children" : ["layer_1"],
+                ...Layer Attributes...
+            },
+            "layer_1" : {
+                "type" : "Relu",
+                "parents" : ["layer_0"],
+                "children" : [],
+                ...Layer Attributes...
+            }
         },
-        "layer_1" : {
-            "type" : "Relu",
-            "parents" : ["layer_0"],
-            "children" : [],
-            ...Layer Attributes...
-        }
-    },
-    "input_layers" : ["layer_0"],
-    "output_layers" : ["layer_1"]
-}
+        "input_layers" : ["layer_0"],
+        "output_layers" : ["layer_1"]
+    }
+
 
 * `"name"` ... denotes the network name and should be identical to the filename
 * `"layers"` ... contains a dictionary with all network layers with layer_names as keys and layer attributes as values
@@ -59,64 +60,64 @@ Generally the Annette Format is derived from the MMDNN IR format in terms of att
 
 *DataInput*
 
-"Placeholder": {
-    "type": "DataInput",
-    "parents": [],
-    "children": [
-        "Conv1"
-        ],
-    "output_shape": [
-        "1",
-        "224",
-        "224",
-        "3"
-    ]
-}
+    "Placeholder": {
+        "type": "DataInput",
+        "parents": [],
+        "children": [
+            "Conv1"
+            ],
+        "output_shape": [
+            1,
+            224,
+            224,
+            3
+        ]
+    }
 
 *Convolution*
 
-"resnet_v1_18/conv1/Conv2D": {
-    "type": "Conv",
-    "parents": [
-        "resnet_v1_18/Pad"
-    ],
-    "children": [
-        "resnet_v1_18/conv1/BatchNorm/FusedBatchNorm"
-    ],
-    "output_shape": [
-        -1,
-        112,
-        112,
-        64
-    ],
-    "input_shape": [
-        -1,
-        230,
-        230,
-        3
-    ],
-    "kernel_shape": [
-        7,
-        7,
-        3,
-        64
-    ],
-    "strides": [
-        1,
-        2,
-        2,
-        1
-    ],
-    "pads": [
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0
-    ]
-}
+    "resnet_v1_18/conv1/Conv2D": {
+        "type": "Conv",
+        "parents": [
+            "resnet_v1_18/Pad"
+        ],
+        "children": [
+            "resnet_v1_18/conv1/BatchNorm/FusedBatchNorm"
+        ],
+        "output_shape": [
+            -1,
+            112,
+            112,
+            64
+        ],
+        "input_shape": [
+            -1,
+            230,
+            230,
+            3
+        ],
+        "kernel_shape": [
+            7,
+            7,
+            3,
+            64
+        ],
+        "strides": [
+            1,
+            2,
+            2,
+            1
+        ],
+        "pads": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+        ]
+    }
 
-for more examples see ./tests/data/...
+for more examples see <a href='./tests/data/'>tests/data/</a>
