@@ -9,5 +9,3 @@ try:
     from .onnx_graph import *
 except ModuleNotFoundError:
     logging.error("ONNX module could not be imported! To use, install onnx!")
-
-print("test")

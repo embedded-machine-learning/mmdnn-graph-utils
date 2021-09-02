@@ -15,6 +15,7 @@ import onnx
 import numpy as np
 from functools import reduce
 from .annette_graph import AnnetteGraph
+import copy
 
 __author__ = "Matthias Wess"
 __copyright__ = "Christian Doppler Laboratory for Embedded Machine Learning"
@@ -36,6 +37,12 @@ def nchw2nhwc(in_shape):
     out_shape = [in_shape[i] for i in [0,2,3,1]]
     logger.debug(out_shape)
     return out_shape
+
+def onnx_node_by_name(name, onnx_nodes):
+    for node_index, node in enumerate(onnx_nodes):
+        node_name = node.name
+        if node_name == name:
+            print(node_name)
 
 def onnx_node_attributes_to_dict(args):
     """
@@ -66,7 +73,7 @@ class ONNXGraph:
 
     """ ONNX Graph Class
 
-    Args:
+    Args
         graphfile (str): MMDNN graphfile
         weightfile(str, optional): MMDNN weightfile, dropped anyways
 
@@ -78,28 +85,37 @@ class ONNXGraph:
         print("Initializing network...")
 
         self.graphfile = graphfile
-        self.input_names = input_names 
+        self.input_names = input_names
 
         self.available = {
             'Conv': self.convert_conv,
             'Mul': self.convert_base,
             'Add': self.convert_base,
+            'Sub': self.convert_base,
+            'Pow': self.convert_base,
             'LeakyRelu': self.convert_base,
             'Clip': self.convert_base,
             'Shape': self.convert_shape,
             'Gather': self.convert_gather,
             'Unsqueeze': self.convert_base,
-            'Concat': self.convert_base,
+            'Concat': self.convert_concat,
             'Constant': self.convert_none,
-            'Reshape': self.convert_base,
+            'Reshape': self.convert_reshape,
+            'Resize': self.convert_resize,
             'Flatten': self.convert_flatten,
             'Dropout': self.convert_base,
             'Softmax': self.convert_base,
             'Relu': self.convert_base,
             'Gemm': self.convert_gemm,
+            'LRN': self.convert_LRN,
             'BatchNormalization': self.convert_base,
             'MaxPool': self.convert_pool,
             'GlobalAveragePool': self.convert_pool,
+            'Less': self.convert_base,
+            'Div' : self.convert_base,
+            'Sigmoid': self.convert_base,
+            'Slice': self.convert_slice,
+            'ReduceMean': self.convert_reducemean,
             'Transpose': self.convert_transpose}
 
         self.onnx_model = onnx.load(graphfile)
@@ -148,9 +164,15 @@ class ONNXGraph:
         annette_outputs = []
         annette_inputs = []
 
+        print(type(self.input_names),self.input_names)
+        if (type(self.input_names) == str):
+            self.input_names = [self.input_names]
+
         if self.input_names:
             for i, input_name in enumerate(self.input_names):
                 for onnx_i in onnx_inputs:
+                    print(onnx_i.name)
+                    print(input_name)
                     if onnx_i.name == input_name:
                         if input_shapes:
                             input_shape = input_shapes[i]
@@ -343,6 +365,7 @@ class ONNXGraph:
                     pad[1] = pad[5] = padding[0]
                     pad[2] = pad[6] = padding[1]
                     #raise NotImplementedError('Not implemented')
+            logger.debug("layers: %s" % layers)
             in_shape = layers[input_0]['output_shape']
             out_shape = [in_shape[0], out_channels, int(in_shape[2]/strides[1]), int(in_shape[3]/strides[2])]
 
@@ -406,6 +429,34 @@ class ONNXGraph:
 
         return
 
+    def convert_LRN(self, node, params, layers, node_name, annette_name):
+        """
+        Convert LRN Layer 
+        :param node: current operation node
+        :param params: operation attributes
+        :param layers: available annette layers
+        :param node_name: internal converter name
+        :param keras_name: resulting layer name
+        :return: None
+        """
+        logger = logging.getLogger('onnx2annette:LRN')
+        print("node:",node)
+        #print("params:",params)
+        #print(layers)
+        print(node_name)
+        print(annette_name)
+        input_name = node.input[0]
+
+        
+        layers[node_name] = {'type':'LRN',
+            'parents': [input_name],
+            'children':[],
+            'input_shape': layers[input_name]['output_shape'],
+            'output_shape': layers[input_name]['output_shape']
+            }
+        self.annette_graph.add_layer(node_name, layers[node_name],True)
+
+        return
 
     def convert_mul(self, node, params, layers, node_name, annette_name):
         """
@@ -432,6 +483,42 @@ class ONNXGraph:
             'input_shape': layers[input_name]['output_shape'],
             'output_shape': layers[input_name]['output_shape']
             }
+        self.annette_graph.add_layer(node_name, layers[node_name],True)
+
+        return
+
+    def convert_reducemean(self, node, params, layers, node_name, annette_name):
+        """
+        Convert reducemena layer
+        :param node: current operation node
+        :param params: operation attributes
+        :param layers: available annette layers
+        :param node_name: internal converter name
+        :param keras_name: resulting layer name
+        :return: None
+        """
+        logger = logging.getLogger('onnx2annette:reducemean')
+        print("node:",node)
+        #print("params:",params)
+        print(layers)
+        print(node_name)
+        print(annette_name)
+        input_name = node.input[0]
+
+        in_shape = layers[input_name]['output_shape']
+        out_shape = np.delete(layers[input_name]['output_shape'],params['axes']).tolist()
+        print(params['axes'])
+
+        logger.debug("input_shape: %s" % in_shape)
+        logger.debug("output_shape: %s" % out_shape)
+
+        layers[node_name] = {'type':'ReduceMean',
+            'parents': [input_name],
+            'children':[],
+            'input_shape': in_shape,
+            'output_shape': out_shape,
+            }
+
         self.annette_graph.add_layer(node_name, layers[node_name],True)
 
         return
@@ -507,6 +594,105 @@ class ONNXGraph:
 
         return
 
+    def convert_concat(self, node, params, layers, node_name, annette_name):
+        """
+        Convert concat layer
+        :param node: current operation node
+        :param params: operation attributes
+        :param layers: available annette layers
+        :param node_name: internal converter name
+        :param keras_name: resulting layer name
+        :return: None
+        """
+        logger = logging.getLogger('onnx2annette:reshape')
+        print("node:",node)
+        print(layers)
+        print(node_name)
+        print(annette_name)
+        print(params)
+
+        ins = []
+        for i in node.input:
+            print(i)
+            if i in layers.keys():
+                ins.append(i)
+        if len(ins) != 1:
+            assert AttributeError('More than 1 input layer')
+            #TODO check if all shapes similar then presume elemwise
+            input_name = ins[0]
+        else:
+            input_name = ins[0]
+        
+        output_shape = copy.deepcopy(layers[ins[0]]['output_shape'])
+        output_shape[params['axis']] = 0
+        for i in ins:
+            output_shape[params['axis']] += layers[i]['output_shape'][params['axis']]
+
+        layers[node_name] = {'type':node.op_type,
+            'parents': ins,
+            'children':[],
+            'input_shape': layers[input_name]['output_shape'],
+            'output_shape': output_shape
+            }
+        self.annette_graph.add_layer(node_name, layers[node_name],True)
+
+        return
+        
+    def convert_reshape(self, node, params, layers, node_name, annette_name):
+        """
+        Convert reshape layer
+        :param node: current operation node
+        :param params: operation attributes
+        :param layers: available annette layers
+        :param node_name: internal converter name
+        :param keras_name: resulting layer name
+        :return: None
+        """
+        logger = logging.getLogger('onnx2annette:reshape')
+        print("node:",node)
+        print(layers)
+        print(node_name)
+        print(annette_name)
+        print(self.weights.keys())
+
+        ins = []
+        for i in node.input:
+            print(i)
+            if i in layers.keys():
+                ins.append(i)
+        if len(ins) != 1:
+            assert AttributeError('More than 1 input layer')
+            #TODO check if all shapes similar then presume elemwise
+            input_name = ins[0]
+        else:
+            input_name = ins[0]
+        
+        input_0 = layers[node.input[0]]
+        output_shape = self.weights[node.input[1]].tolist()
+        input_shape = layers[input_name]['output_shape']
+        print(input_shape)
+        prod = reduce(lambda x, y: x * y, layers[input_name]['output_shape'])
+        prod_out = reduce(lambda x, y: x * y, output_shape)
+        for n, x in enumerate(output_shape):
+            if x == -1:
+                output_shape[n] = int(prod/prod_out*-1)
+                print(output_shape)
+
+
+        
+        print(input_0)
+        print(output_shape)
+
+        layers[node_name] = {'type':node.op_type,
+            'parents': ins,
+            'children':[],
+            'input_shape': layers[input_name]['output_shape'],
+            'output_shape': output_shape
+            }
+        self.annette_graph.add_layer(node_name, layers[node_name],True)
+
+        return
+
     def convert_base(self, node, params, layers, node_name, annette_name):
         """
         Convert base layer
@@ -534,14 +720,67 @@ class ONNXGraph:
             input_name = ins[0]
         else:
             input_name = ins[0]
-        print(ins)
-
 
         layers[node_name] = {'type':node.op_type,
             'parents': ins,
             'children':[],
             'input_shape': layers[input_name]['output_shape'],
             'output_shape': layers[input_name]['output_shape']
+            }
+        self.annette_graph.add_layer(node_name, layers[node_name],True)
+
+        return
+
+    def convert_slice(self, node, params, layers, node_name, annette_name):
+        """
+        Convert slice layer
+        :param node: current operation node
+        :param params: operation attributes
+        :param layers: available annette layers
+        :param node_name: internal converter name
+        :param keras_name: resulting layer name
+        :return: None
+        """
+        logger = logging.getLogger('onnx2annette:slice')
+        print("node:",node)
+        print(node_name)
+        print(annette_name)
+        print(params)
+
+        ins = []
+        for i in node.input:
+            print(i)
+            if i in layers.keys():
+                ins.append(i)
+        print(ins)
+        if len(ins) != 1:
+            assert AttributeError('More than 1 input layer')
+            #TODO check if all shapes similar then presume elemwise
+            input_name = ins[0]
+        else:
+            input_name = ins[0]
+
+
+        starts = self.weights[node.input[1]].tolist()
+        ends = self.weights[node.input[2]].tolist()
+        axes = self.weights[node.input[3]].tolist()
+        steps = self.weights[node.input[4]].tolist()
+        input_shape = copy.deepcopy(layers[input_name]['output_shape'])
+        print(starts,ends,axes,steps)
+        output_shape = input_shape
+        if ends[0] != 9223372036854775807:
+            diff = ends[0] - starts[0]
+        else:
+            diff = input_shape[axes[0]] - starts[0]
+
+        output_shape[axes[0]] = int(np.ceil((diff)/steps[0]))
+
+
+        layers[node_name] = {'type':node.op_type,
+            'parents': ins,
+            'children':[],
+            'input_shape': layers[input_name]['output_shape'],
+            'output_shape': output_shape
             }
         self.annette_graph.add_layer(node_name, layers[node_name],True)
 
@@ -656,6 +895,51 @@ class ONNXGraph:
 
         output_shape = [layers[input_name]['output_shape'][0], reduce(lambda x, y: x*y, layers[input_name]['output_shape'][1:])]
 
+
+        layers[node_name] = {'type':node.op_type,
+            'parents': ins,
+            'children':[],
+            'input_shape': layers[input_name]['output_shape'],
+            'output_shape': output_shape,
+            }
+        self.annette_graph.add_layer(node_name, layers[node_name],True)
+
+        return
+
+    def convert_resize(self, node, params, layers, node_name, annette_name):
+        """
+        Convert resize layer
+        :param node: current operation node
+        :param params: operation attributes
+        :param layers: available annette layers
+        :param node_name: internal converter name
+        :param keras_name: resulting layer name
+        :return: None
+        """
+        logger = logging.getLogger('onnx2annette:resize')
+        logger.debug("node:",node)
+        logger.debug(layers)
+        logger.debug(node_name)
+        logger.debug(annette_name)
+
+        ins = []
+        for i in node.input:
+            print(i)
+            if i in layers.keys():
+                ins.append(i)
+        if len(ins) != 1:
+            assert AttributeError('More than 1 input layer')
+            #TODO check if all shapes similar then presume elemwise
+            input_name = ins[0]
+        else:
+            input_name = ins[0]
+
+        #onnx_node_by_name('562', self.onnx_model.graph.node)
+        logger.debug(node.input)
+        #onnx_node_attributes_to_dict(self.)
+        #logger.debug(self.onnx_model.graph.node[10])
+        output_shape = [int(x*y) for x, y in zip(layers[input_name]['output_shape'],self.weights[node.input[2]])]
+        logger.debug(output_shape)
 
         layers[node_name] = {'type':node.op_type,
             'parents': ins,
