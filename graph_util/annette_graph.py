@@ -262,7 +262,7 @@ class AnnetteGraph():
 
     def compute_dims(self):
         #loop through layers
-        #print(self.model_spec)
+        logging.debug(self.model_spec)
         for l_name in self._get_topological_sort():
             logging.debug("current layer")
             l_attr = self.model_spec['layers'][l_name]
