@@ -343,10 +343,10 @@ class ONNXGraph:
 
             print(height, width, channels_per_group, out_channels)
 
-            print(out_channels)#32
-            print((height, width))#(3,3)
-            print((strides[0], strides[1]))#(1,1)
-            print(has_bias)#false
+            logger.debug('Out Channels %s' % out_channels)#32
+            logger.debug((height, width))#(3,3)
+            logger.debug((strides[0], strides[1]))#(1,1)
+            logger.debug('Bias %s' % has_bias)#false
             print(dilation)#1
             print(annette_name)#convolut
             kernel_shape = [height, width, channels_per_group, out_channels]
@@ -365,9 +365,13 @@ class ONNXGraph:
                     pad[1] = pad[5] = padding[0]
                     pad[2] = pad[6] = padding[1]
                     #raise NotImplementedError('Not implemented')
-            logger.debug("layers: %s" % layers)
             in_shape = layers[input_0]['output_shape']
-            out_shape = [in_shape[0], out_channels, int(in_shape[2]/strides[1]), int(in_shape[3]/strides[2])]
+            if (len(in_shape) == 4):
+                out_shape = [in_shape[0], out_channels, int(in_shape[2]/strides[1]), int(in_shape[3]/strides[2])]
+            elif (len(in_shape) == 2):
+                out_shape = [in_shape[0], out_channels]
+            else:
+                raise NotImplementedError
 
             logger.debug("input_shape: %s" % in_shape)
             logger.debug("output_shape: %s" % out_shape)
@@ -384,6 +388,7 @@ class ONNXGraph:
                 'output_shape': out_shape}
             self.annette_graph.add_layer(node_name, layers[node_name],True)
             
+            logger.debug("layers: %s" % layers)
             #using functional model
             #input 0: Tensor("input_1:0", shape=(None, 3, 0, 0), dtype=float32)
         else:
@@ -506,7 +511,9 @@ class ONNXGraph:
         input_name = node.input[0]
 
         in_shape = layers[input_name]['output_shape']
-        out_shape = np.delete(layers[input_name]['output_shape'],params['axes']).tolist()
+        out_shape = copy.copy(in_shape)
+        for p in params['axes']:
+            out_shape[p] = 1
         print(params['axes'])
 
         logger.debug("input_shape: %s" % in_shape)
@@ -674,7 +681,11 @@ class ONNXGraph:
         prod = reduce(lambda x, y: x * y, layers[input_name]['output_shape'])
         prod_out = reduce(lambda x, y: x * y, output_shape)
         for n, x in enumerate(output_shape):
-            if x == -1:
+            if n == 0: 
+                if input_shape[0] == -1 and output_shape[0] == 1:
+                    prod = prod*-1
+                    output_shape[0] = -1
+            elif x == -1:
                 output_shape[n] = int(prod/prod_out*-1)
                 print(output_shape)
 
