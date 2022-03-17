@@ -378,7 +378,11 @@ class ONNXGraph:
             logger.debug("kernel_shape: %s" % kernel_shape)
             logger.debug("strides: %s" % strides)
             logger.debug("pads: %s" % pad)
-            layers[node_name] = {'type':'Conv',
+            if n_groups == out_channels:
+                t = 'DepthwiseConv'
+            else:
+                t = 'Conv'
+            layers[node_name] = {'type': t,
                 'parents': [input_0],
                 'children':[],
                 'input_shape': in_shape,
@@ -389,6 +393,9 @@ class ONNXGraph:
             self.annette_graph.add_layer(node_name, layers[node_name],True)
             
             logger.debug("layers: %s" % layers)
+            if n_groups != 1:
+                print(n_groups)
+                print(layers[node_name])
             #using functional model
             #input 0: Tensor("input_1:0", shape=(None, 3, 0, 0), dtype=float32)
         else:

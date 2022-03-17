@@ -220,12 +220,14 @@ class AnnetteGraph():
 
             if name in self.model_spec['input_layers']:
                 for c in children:
-                    self.model_spec['input_layers'].append(c)
+                    if c not in self.model_spec['input_layers']:
+                        self.model_spec['input_layers'].append(c)
                 self.model_spec['input_layers'].remove(name)
 
             if name in self.model_spec['output_layers']:
                 for p in parents:
-                    self.model_spec['output_layers'].append(p)
+                    if p not in self.model_spec['output_layers']:
+                        self.model_spec['output_layers'].append(p)
                 self.model_spec['output_layers'].remove(name)
 
             del self.model_spec['layers'][name]
@@ -301,7 +303,24 @@ class AnnetteGraph():
             logging.debug(tmp_sum)
         else:
             raise RuntimeError 
-            
+
+    def compute_dims_Pool(self, l_name):
+        l_attr = self.model_spec['layers'][l_name]
+        l_type = l_attr['type'] 
+        p_name = self.model_spec['layers'][l_name]['parents']
+        #get input from parents
+        if len(p_name) == 1:
+            p_attr = self.model_spec['layers'][p_name[0]]
+            l_attr['input_shape'] = p_attr['output_shape']
+        else:
+            raise NotImplementedError
+        if reduce(lambda x,y: x*y, l_attr['pads']) == 0:
+            l_attr['output_shape'] = [x-int((y-1)) for x, y in zip(l_attr['input_shape'], l_attr['kernel_shape'])]
+        elif 'strides' in l_attr:
+            l_attr['output_shape'] = [int(x/y) for x, y in zip(l_attr['input_shape'], l_attr['strides'])]
+        else:
+            l_attr['output_shape'] = l_attr['input_shape']
+        l_attr['output_shape'][-1] = l_attr['input_shape'][-1]
         logging.debug(l_attr)
         return deepcopy(l_attr)
 
@@ -318,7 +337,18 @@ class AnnetteGraph():
         logging.debug(l_attr)
         return deepcopy(l_attr)
 
-    def compute_dims_MatMul(self, l_name):
+    def compute_dims_Reshape(self, l_name):
+        p_name = self.model_spec['layers'][l_name]['parents']
+        l_attr = self.model_spec['layers'][l_name]
+        l_type = l_attr['type'] 
+
+        p_attr = self.model_spec['layers'][p_name[0]]
+        l_attr['input_shape'] = p_attr['output_shape']
+            
+        logging.debug(l_attr)
+        return deepcopy(l_attr)
+
+    def compute_dims_FullyConnected(self, l_name):
         l_attr = self.model_spec['layers'][l_name]
         l_type = l_attr['type'] 
         p_name = self.model_spec['layers'][l_name]['parents']
@@ -326,6 +356,21 @@ class AnnetteGraph():
         if len(p_name) == 1:
             p_attr = self.model_spec['layers'][p_name[0]]
             l_attr['input_shape'] = p_attr['output_shape']
+        else:
+            raise NotImplementedError
+
+        l_attr['output_shape'][0] = l_attr['input_shape'][0]
+        logging.debug(l_attr)
+        return deepcopy(l_attr)
+
+    def compute_dims_MatMul(self, l_name):
+        l_attr = self.model_spec['layers'][l_name]
+        l_type = l_attr['type'] 
+        p_name = self.model_spec['layers'][l_name]['parents']
+        #get input from parents
+        if len(p_name) == 1:
+            p_attr = self.model_spec['layers'][p_name[0]]
+            l_attr['input_shape'][0] = p_attr['output_shape'][0]
         else:
             raise NotImplementedError
 
