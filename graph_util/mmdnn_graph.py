@@ -33,16 +33,18 @@ class MMGraph:
         IR_graph : mmdnn Intermediate Representation Graph 
     """
 
-    def __init__(self, graphfile, weightfile=None):
+    def __init__(self, graphfile=None, weightfile=None):
         print("Initializing network...")
 
         self.graphfile = graphfile
         self.weightfile = weightfile
 
         self.IR_graph = IRGraph(self.graphfile)
+        print("Loading weights...")
         self.IR_graph.build()
         self.IR_graph.model = 1
-
+        print(self.IR_graph)
+        
         if self.weightfile is None:
             logging.info("No weights file loaded\n")
         else:

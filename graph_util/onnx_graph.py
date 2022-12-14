@@ -110,6 +110,7 @@ class ONNXGraph:
             'LRN': self.convert_LRN,
             'BatchNormalization': self.convert_base,
             'MaxPool': self.convert_pool,
+            'AveragePool': self.convert_pool,
             'GlobalAveragePool': self.convert_pool,
             'Less': self.convert_base,
             'Div' : self.convert_base,

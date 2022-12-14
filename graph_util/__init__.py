@@ -1,5 +1,7 @@
 import logging
 
+from .nn_graph import *
+# from .gnn_dataloader import *
 from .annette_graph import *
 try:
     from .mmdnn_graph import *

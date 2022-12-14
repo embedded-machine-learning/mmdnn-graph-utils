@@ -50,6 +50,13 @@ class AnnetteGraph():
         self._make_input_layers()
         self._make_output_layers()
         self.topological_sort = self._get_topological_sort()
+    
+    def resort(self):
+        """Resort Layers """
+        self._make_input_layers()
+        self._make_output_layers()
+        self.topological_sort = self._get_topological_sort()
+        return True
 
     def add_layer(self, layer_name, layer_attr, resort = False):
         """Add a layer to the network description graph -> model_spec[layers]
