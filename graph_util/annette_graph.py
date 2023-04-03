@@ -11,6 +11,7 @@ import numpy as np
 import sys
 from copy import copy, deepcopy
 from functools import reduce
+import texttable
 
 __author__ = "Matthias Wess"
 __copyright__ = "Christian Doppler Laboratory for Embedded Machine Learning"
@@ -57,6 +58,28 @@ class AnnetteGraph():
         self._make_output_layers()
         self.topological_sort = self._get_topological_sort()
         return True
+
+    def print_as_table(self):
+        table = texttable.Texttable(0)
+        table.set_cols_align(['l', 'l', 'l', 'l'])
+        table.header(['Layer Name', 'Input Shape', 'Kernel Shape', 'Output Shape'])
+
+        for l in self.topological_sort:
+            inshape = outshape = kshape = '--'
+            params = self.model_spec['layers'][l]
+            if 'input_shape' in params.keys():
+                inshape = params['input_shape']
+            if 'output_shape' in params.keys():
+                outshape = params['output_shape']
+            outshape = params['output_shape']
+            if 'kernel_shape' in params.keys():
+                kshape = params['kernel_shape']
+            table.add_row([l, inshape, kshape, outshape])
+
+        print()
+        print('AnnetteGraph information (topologically sorted):')
+        print(table.draw())
+        print()
 
     def add_layer(self, layer_name, layer_attr, resort = False):
         """Add a layer to the network description graph -> model_spec[layers]
@@ -299,17 +322,27 @@ class AnnetteGraph():
         l_type = l_attr['type'] 
         #get input from parents
         if 'axis' in l_attr:
-            tmp_sum = 0
-            l_attr['input_shape'] = [0]*len(p_name)
-            for n, p_tmp in enumerate(p_name):
-                p_attr = self.model_spec['layers'][p_tmp]
-                tmp_sum = tmp_sum + p_attr['output_shape'][l_attr['axis']]
-                l_attr['input_shape'][n] = copy(p_attr['output_shape'])
-                l_attr['output_shape'] = copy(p_attr['output_shape'])
-            l_attr['output_shape'][l_attr['axis']] = tmp_sum
-            logging.debug(tmp_sum)
+            axis = l_attr['axis']
         else:
-            raise RuntimeError 
+            #compare input and output shape and select axis where they differ
+            axis = 0
+            for n in range(len(l_attr['input_shape'])):
+                if l_attr['output_shape'][n] != l_attr['input_shape'][n]:
+                    axis = n
+                    break
+        l_attr['axis'] = axis
+
+        tmp_sum = 0
+        l_attr['input_shape'] = [0]*len(p_name)
+        for n, p_tmp in enumerate(p_name):
+            p_attr = self.model_spec['layers'][p_tmp]
+            tmp_sum = tmp_sum + p_attr['output_shape'][l_attr['axis']]
+            l_attr['input_shape'][n] = copy(p_attr['output_shape'])
+            l_attr['output_shape'] = copy(p_attr['output_shape'])
+        l_attr['output_shape'][l_attr['axis']] = tmp_sum
+        logging.debug(tmp_sum)
+        return deepcopy(l_attr)
+
 
     def compute_dims_Pool(self, l_name):
         l_attr = self.model_spec['layers'][l_name]
@@ -321,10 +354,21 @@ class AnnetteGraph():
             l_attr['input_shape'] = p_attr['output_shape']
         else:
             raise NotImplementedError
-        if reduce(lambda x,y: x*y, l_attr['pads']) == 0:
+        if 'strides' in l_attr:
+            #add padding to input shape
+            tmp_pads = [0]*(len(l_attr['pads'])//2)
+            for n in range(len(l_attr['pads'])//2):
+                tmp_pads[n] = l_attr['pads'][n]+l_attr['pads'][n+len(tmp_pads)]
+            tmp_inputs = l_attr['input_shape']
+            print(tmp_inputs, tmp_pads)
+            tmp_input_shape = [x+y for x, y in zip(tmp_inputs, tmp_pads)]
+            print(tmp_input_shape)
+            l_attr['output_shape'] = [int((x-(y-1))/z) for x, y, z in zip(tmp_input_shape, l_attr['kernel_shape'], l_attr['strides'])]
+            print(l_attr['output_shape'])
+        elif reduce(lambda x,y: x*y, l_attr['pads']) == 0:
             l_attr['output_shape'] = [x-int((y-1)) for x, y in zip(l_attr['input_shape'], l_attr['kernel_shape'])]
-        elif 'strides' in l_attr:
-            l_attr['output_shape'] = [int(x/y) for x, y in zip(l_attr['input_shape'], l_attr['strides'])]
+            print(l_attr['output_shape'])
+            exit()
         else:
             l_attr['output_shape'] = l_attr['input_shape']
         l_attr['output_shape'][-1] = l_attr['input_shape'][-1]
@@ -386,6 +430,7 @@ class AnnetteGraph():
         return deepcopy(l_attr)
 
     def compute_dims_Conv(self, l_name):
+        #TODO: add dilation
         l_attr = self.model_spec['layers'][l_name]
         l_type = l_attr['type'] 
         p_name = self.model_spec['layers'][l_name]['parents']
@@ -396,7 +441,16 @@ class AnnetteGraph():
         else:
             raise NotImplementedError
         if 'strides' in l_attr:
-            l_attr['output_shape'] = [int(x/y) for x, y in zip(l_attr['input_shape'], l_attr['strides'])]
+            if 'pads' in l_attr:
+                temp_pads = [0]*(len(l_attr['pads'])//2)
+                for n in range(len(l_attr['pads'])//2):
+                    temp_pads[n] = l_attr['pads'][n]+l_attr['pads'][n+len(temp_pads)]
+                temp_kernel = [0]*4
+                temp_kernel[1] = l_attr['kernel_shape'][0]-1
+                temp_kernel[2] = l_attr['kernel_shape'][1]-1
+                l_attr['output_shape'] = [int((x+z-k)/y) for k, x, y, z in zip(temp_kernel, l_attr['input_shape'], l_attr['strides'], temp_pads)]
+            else:
+                l_attr['output_shape'] = [int(x/y) for x, y in zip(l_attr['input_shape'], l_attr['strides'])]
         else:
             l_attr['output_shape'] = l_attr['input_shape']
         l_attr['output_shape'][-1] = l_attr['kernel_shape'][-1]
@@ -433,6 +487,17 @@ class AnnetteGraph():
         return count
 
     def to_json(self, filename):
+        # replace in names, children and parents, :: with _
+        for node in self.model_spec['layers'].values():
+            for i, in_edge in enumerate(node['parents']):
+                node['parents'][i] = in_edge.replace('::', '_')
+            for i, out_edge in enumerate(node['children']):
+                node['children'][i] = out_edge.replace('::', '_')
+        # replace in key names :: with _
+        for key,value in self.model_spec['layers'].copy().items():
+            self.model_spec['layers'][key.replace('::', '_')] = self.model_spec['layers'].pop(key)
+
+
         with open(filename, 'w') as f:
             f.write(json.dumps(self.model_spec, indent=4))
         print("Stored to %s" % filename)
