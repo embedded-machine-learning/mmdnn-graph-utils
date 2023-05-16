@@ -13,6 +13,13 @@ from copy import copy, deepcopy
 from functools import reduce
 import texttable
 
+from collections import OrderedDict
+
+def replace_all(text, dic):
+    for i, j in dic.items():
+        text = text.replace(i, j)
+    return text
+
 __author__ = "Matthias Wess"
 __copyright__ = "Christian Doppler Laboratory for Embedded Machine Learning"
 __license__ = "Apache-2.0"
@@ -52,6 +59,25 @@ class AnnetteGraph():
         self._make_output_layers()
         self.topological_sort = self._get_topological_sort()
     
+    def scale_input_resolution(self, factor=1.):
+        # loop over all input layers
+        for layer in self.model_spec['input_layers']:
+            print("Scaling input resolution of layer: ", layer)
+            # get input shape
+            print(self.model_spec['layers'][layer])
+            output_shape = self.model_spec['layers'][layer]['output_shape']
+            # scale input shape
+            for i in (1,2):
+                output_shape[i] = int(output_shape[i] * factor)
+            # set input shape
+            self.model_spec['layers'][layer]['output_shape'] = output_shape
+        # recompute dims
+        self._make_input_layers()
+        self._make_output_layers()
+        self.topological_sort = self._get_topological_sort()
+        self.compute_dims()
+        return True
+            
     def resort(self):
         """Resort Layers """
         self._make_input_layers()
@@ -262,7 +288,7 @@ class AnnetteGraph():
 
             del self.model_spec['layers'][name]
             self._get_topological_sort()
-            return True
+            return self
         else:
             logging.warning("Layer %s does not exists" % name)
             return False
@@ -348,10 +374,17 @@ class AnnetteGraph():
         l_attr = self.model_spec['layers'][l_name]
         l_type = l_attr['type'] 
         p_name = self.model_spec['layers'][l_name]['parents']
+        #if inputshape is like kernel shape assume global pooling and adapt kernel size
+        global_average = False
+        if l_attr['input_shape'][1:3] == l_attr['kernel_shape'][1:3]:
+            global_average = True
+            
         #get input from parents
         if len(p_name) == 1:
             p_attr = self.model_spec['layers'][p_name[0]]
             l_attr['input_shape'] = p_attr['output_shape']
+            if global_average:
+                l_attr['kernel_shape'][1:3] = l_attr['input_shape'][1:3]
         else:
             raise NotImplementedError
         if 'strides' in l_attr:
@@ -469,7 +502,12 @@ class AnnetteGraph():
             if l_type in ['Add']:
                 p_attr = self.model_spec['layers'][p_name[0]]
                 l_attr['input_shape'] = p_attr['output_shape']
+            elif l_type in ['Mul']:
+                p_attr = self.model_spec['layers'][p_name[0]]
+                l_attr['input_shape'] = p_attr['output_shape']
             else:
+                print("help")
+                print(l_type)
                 raise NotImplementedError
         if 'strides' in l_attr:
             l_attr['output_shape'] = [int(x/y) for x, y in zip(l_attr['input_shape'], l_attr['strides'])]
@@ -488,16 +526,18 @@ class AnnetteGraph():
 
     def to_json(self, filename):
         # replace in names, children and parents, :: with _
+        od = OrderedDict([(":", ""), (" ", ""), ("/", ""), (".", "")])
         for node in self.model_spec['layers'].values():
             for i, in_edge in enumerate(node['parents']):
-                node['parents'][i] = in_edge.replace('::', '_')
+                node['parents'][i] = replace_all(in_edge, od)
             for i, out_edge in enumerate(node['children']):
-                node['children'][i] = out_edge.replace('::', '_')
+                node['children'][i] = replace_all(out_edge, od)
         # replace in key names :: with _
         for key,value in self.model_spec['layers'].copy().items():
-            self.model_spec['layers'][key.replace('::', '_')] = self.model_spec['layers'].pop(key)
+            self.model_spec['layers'][replace_all(key, od)] = self.model_spec['layers'].pop(key)
 
 
         with open(filename, 'w') as f:
             f.write(json.dumps(self.model_spec, indent=4))
+            f.close()
         print("Stored to %s" % filename)

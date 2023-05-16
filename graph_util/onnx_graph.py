@@ -89,7 +89,7 @@ class ONNXGraph:
 
         self.available = {
             'Conv': self.convert_conv,
-            'Mul': self.convert_base,
+            'Mul': self.convert_mul,
             'Add': self.convert_base,
             'Sub': self.convert_base,
             'Pow': self.convert_base,
@@ -115,6 +115,7 @@ class ONNXGraph:
             'Less': self.convert_base,
             'Div' : self.convert_base,
             'Sigmoid': self.convert_base,
+            'HardSigmoid': self.convert_base,
             'Slice': self.convert_slice,
             'ReduceMean': self.convert_reducemean,
             'Transpose': self.convert_transpose}
@@ -165,41 +166,49 @@ class ONNXGraph:
         annette_outputs = []
         annette_inputs = []
 
-        print(type(self.input_names),self.input_names)
-        if (type(self.input_names) == str):
-            self.input_names = [self.input_names]
 
-        if self.input_names:
-            for i, input_name in enumerate(self.input_names):
-                for onnx_i in onnx_inputs:
-                    print(onnx_i.name)
-                    print(input_name)
-                    if onnx_i.name == input_name:
-                        if input_shapes:
-                            input_shape = input_shapes[i]
-                        else:
-                            input_shape = [i.dim_value for i in onnx_i.type.tensor_type.shape.dim][1:]
 
-                        print("#TODO add input layer",input_shape,input_name)
-                        """
-                        layers[input_name] = keras.layers.InputLayer(
-                            input_shape=input_shape, name=input_name
-                        ).output
-                        """
-                        layers[input_name] = {'type':'DataInput',
-                            'parents':[],
-                            'children':[],
-                            'output_shape':[-1] + input_shape}
-                        self.annette_graph.add_layer(input_name, layers[input_name],True)
+        for j in range(2):
+            print(type(self.input_names),self.input_names)
+            if (type(self.input_names) == str):
+                self.input_names = [self.input_names]
+            if self.input_names:
+                for i, input_name in enumerate(self.input_names):
+                    for onnx_i in onnx_inputs:
+                        print(onnx_i.name)
+                        print(input_name)
+                        if onnx_i.name == input_name:
+                            if input_shapes:
+                                input_shape = input_shapes[i]
+                            else:
+                                input_shape = [i.dim_value for i in onnx_i.type.tensor_type.shape.dim][1:]
 
-                        annette_inputs.append(layers[input_name])
+                            print("#TODO add input layer",input_shape,input_name)
+                            """
+                            layers[input_name] = keras.layers.InputLayer(
+                                input_shape=input_shape, name=input_name
+                            ).output
+                            """
+                            layers[input_name] = {'type':'DataInput',
+                                'parents':[],
+                                'children':[],
+                                'output_shape':[-1] + input_shape}
+                            self.annette_graph.add_layer(input_name, layers[input_name],True)
 
-                        logger.debug('Found input {0} with shape {1}'.format(input_name, input_shape))
-        if len(layers) == 0:
-            print("Inputs '%s' not found! Probable inputs:" % self.input_names)
-            for i, input in enumerate(onnx_inputs):
-                print('Input {0} -> {1}'.format(i, input.name))
-                return 0
+                            annette_inputs.append(layers[input_name])
+
+                            logger.debug('Found input {0} with shape {1}'.format(input_name, input_shape))
+
+            if len(layers) == 0:
+                print(f"Inputs '{self.input_names}' not found! Probable inputs:")
+                for i, input in enumerate(onnx_inputs):
+                    print('Input {0} -> {1}'.format(i, input.name))
+                    if j == 1:
+                        return None
+                    else:
+                        self.input_names = input.name
+            else:
+                break
 
         self.weights = weights
         # Convert every operation separable
@@ -487,14 +496,51 @@ class ONNXGraph:
         print(layers)
         print(node_name)
         print(annette_name)
-        input_name = node.input[0]
 
+        shape = []
+        if len(node.input) == 1:
+            input_name = [node.input[0]]
+            in_shape = layers[input_name]['output_shape']
+            shape = layers[input_name]['output_shape']
+        elif len(node.input) == 2:
+            input_name = node.input[1]
+            shape = layers[input_name]['output_shape']
+            #check if output_shape is the same
+            if layers[node.input[0]]['output_shape'] != layers[node.input[1]]['output_shape']:
+                print(node.input)
+                input_name = node.input[0]
+                print(f"input_shape: {layers[input_name]['output_shape']}")
+                input_name = node.input[1]
+                print(f"input_shape: {layers[input_name]['output_shape']}")
+                # check if equal dimensions
+                if len(layers[node.input[0]]['output_shape']) == len(layers[node.input[1]]['output_shape']):
+                    shape = [0]*len(layers[node.input[0]]['output_shape'])
+                    for i in range(len(layers[node.input[0]]['output_shape'])):
+                        if layers[node.input[0]]['output_shape'][i] > layers[node.input[1]]['output_shape'][i]:
+                            shape[i] = layers[node.input[0]]['output_shape'][i]
+                        else:
+                            shape[i] = layers[node.input[1]]['output_shape'][i]
+
+                else:
+                    raise NotImplementedError('Not implemented')
+            input_name = [node.input[0],node.input[1]]
+            print(node.input)
+            #input_name = [node.input[0]]
+            rng = [*range(len(input_name))]
+            print(rng)
+            in_shape = []
+            for i in rng:
+                in_shape.append(layers[node.input[i]]['output_shape'])
+        else:
+            raise NotImplementedError('Not implemented')
+        
+        #logging.debug(f"input_shape: {layers[input_name]['output_shape']}")
         
         layers[node_name] = {'type':'Mul',
-            'parents': [input_name],
+            'parents': input_name,
             'children':[],
-            'input_shape': layers[input_name]['output_shape'],
-            'output_shape': layers[input_name]['output_shape']
+            'input_shape': in_shape,
+            'output_shape': shape
             }
         self.annette_graph.add_layer(node_name, layers[node_name],True)
 
@@ -952,12 +998,16 @@ class ONNXGraph:
             input_name = ins[0]
         else:
             input_name = ins[0]
+        
 
         #onnx_node_by_name('562', self.onnx_model.graph.node)
         logger.debug(node.input)
         #onnx_node_attributes_to_dict(self.)
         #logger.debug(self.onnx_model.graph.node[10])
-        output_shape = [int(x*y) for x, y in zip(layers[input_name]['output_shape'],self.weights[node.input[2]])]
+        print(node.input)
+        print(node)
+
+        output_shape = [int(x*y) for x, y in zip(layers[input_name]['output_shape'],self.weights[node.input[-1]])]
         logger.debug(output_shape)
 
         layers[node_name] = {'type':node.op_type,
