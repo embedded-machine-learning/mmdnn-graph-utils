@@ -825,11 +825,19 @@ class ONNXGraph:
         else:
             input_name = ins[0]
 
-
-        starts = self.weights[node.input[1]].tolist()
-        ends = self.weights[node.input[2]].tolist()
-        axes = self.weights[node.input[3]].tolist()
-        steps = self.weights[node.input[4]].tolist()
+        if len(node.input) > 1:
+            starts = self.weights[node.input[1]].tolist()
+            ends = self.weights[node.input[2]].tolist()
+            axes = self.weights[node.input[3]].tolist()
+            steps = self.weights[node.input[4]].tolist()
+        else:
+            starts = params['starts']
+            ends = params['ends']
+            axes = params['axes']
+            if 'steps' in params.keys():
+                steps = [params['steps']]
+            else:
+                steps = [1]
         input_shape = copy.deepcopy(layers[input_name]['output_shape'])
         print(starts,ends,axes,steps)
         output_shape = input_shape
