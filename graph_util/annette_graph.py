@@ -505,6 +505,9 @@ class AnnetteGraph():
             elif l_type in ['Mul']:
                 p_attr = self.model_spec['layers'][p_name[0]]
                 l_attr['input_shape'] = p_attr['output_shape']
+            elif l_type in ['Sub']:
+                p_attr = self.model_spec['layers'][p_name[0]]
+                l_attr['input_shape'] = p_attr['output_shape']
             else:
                 print("help")
                 print(l_type)

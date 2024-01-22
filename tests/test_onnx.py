@@ -23,7 +23,8 @@ def test_ONNXGraph_to_annette(network="cf_resnet50",inputs=None):
     return 0 
 
 def main():
-    test_ONNXGraph_to_annette('squeezenet1.0-9',['data_0'])
+    #test_ONNXGraph_to_annette('squeezenet1.0-9',['data_0'])
+    test_ONNXGraph_to_annette('yolo_nas_s',[])
 
 
 if __name__ == '__main__':
